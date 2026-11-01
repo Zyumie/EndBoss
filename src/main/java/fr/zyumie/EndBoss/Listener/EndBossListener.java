@@ -2,6 +2,9 @@ package fr.zyumie.EndBoss.Listener;
 
 import fr.zyumie.EndBoss.EndBossRegistry;
 import fr.zyumie.EndBoss.IA.EndBossBrain;
+import fr.zyumie.EndBoss.IA.EndBossCinematics;
+import fr.zyumie.EndBoss.IA.ScrambledInventories;
+import fr.zyumie.EndBoss.IA.StolenItems;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -10,6 +13,7 @@ import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.Tag;
+import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -22,9 +26,12 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
@@ -54,7 +61,7 @@ public class EndBossListener implements Listener {
         if (attacker == null) return;
 
         boolean melee = event.getDamager() instanceof Player;
-        double dmg = event.getDamage() * brain.cfg().getDouble("boss.damage-taken-multiplier", 0.6);
+        double dmg = event.getDamage() * brain.cfg().getDouble("boss.damage-taken-multiplier", 0.6) * brain.water().damageTaken();
         boolean blocked = false;
 
         if (brain.isShielding() && brain.isInFront(event.getDamager().getLocation())) {
@@ -72,6 +79,12 @@ public class EndBossListener implements Listener {
 
         event.setDamage(dmg);
         brain.onDamaged(attacker, dmg, melee, blocked);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBossDeals(EntityDamageByEntityEvent event) {
+        EndBossBrain brain = EndBossRegistry.get(event.getDamager());
+        if (brain != null) event.setDamage(event.getDamage() * brain.water().damageDealt());
     }
 
     /** Totem d'immortalité : un coup mortel est annulé tant qu'il reste des totems. */
@@ -132,8 +145,39 @@ public class EndBossListener implements Listener {
     }
 
     @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        StolenItems.giveBack(event.getPlayer());
+        ScrambledInventories.restore(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        StolenItems.onDeath(event);
+        ScrambledInventories.onDeath(event);
+    }
+
+    @EventHandler
     public void onVehicleEnter(VehicleEnterEvent event) {
         if (EndBossRegistry.isBoss(event.getEntered())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onNetherPortal(PlayerPortalEvent event) {
+        if (event.getCause() != PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) return;
+        if (!plugin.getConfig().getBoolean("boss.dimension-lock.enabled", true)) return;
+        if (event.getFrom().getWorld().getEnvironment() != World.Environment.NORMAL) return;
+
+        if (EndBossRegistry.isBossAlive()) {
+            event.setCancelled(true);
+            String msg = plugin.getConfig().getString("boss.dimension-lock.message", "&cLe Nether est scellé !");
+            event.getPlayer().sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
+            event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 0.5f);
+        }
+    }
+
+    @EventHandler
+    public void onBossPortal(EntityPortalEvent event) {
+        if (EndBossRegistry.isBoss(event.getEntity())) event.setCancelled(true);
     }
 
     @EventHandler
@@ -174,6 +218,7 @@ public class EndBossListener implements Listener {
 
         loc.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0, 1, 0), 150, 1, 1, 1, 0.5);
         loc.getWorld().playSound(loc, Sound.UI_TOAST_CHALLENGE_COMPLETE, 2.0f, 0.5f);
+        EndBossCinematics.death(loc);
 
         LegacyComponentSerializer legacy = LegacyComponentSerializer.legacySection();
         Bukkit.broadcast(legacy.deserialize("§4§l[EndBoss] Le Gardien du Vide a succombé ! Le portail de l'End est enfin déverrouillé !"));

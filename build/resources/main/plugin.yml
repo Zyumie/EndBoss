@@ -5,6 +5,8 @@ api-version: '1.21'
 author: Zyumie
 website: https://www.youtube.com/@AyanoBrz
 description: Boss de l'End en 3 phases avec IA adaptative
+softdepend:
+  - packetevents
 commands:
   endboss:
     description: Commande principale du EndBoss

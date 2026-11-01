@@ -76,6 +76,11 @@ public class EndBossMovement {
             unreachable = result == null || !result.canReachFinalPoint();
         }
 
+        if (brain.water().swim(t, dist)) {
+            if (stuckTicks >= 20) brain.scaffold().clearPath(t);
+            return;
+        }
+
         boolean shielding = brain.isShielding();
 
         // --- cible perchée en hauteur et inaccessible : anti-pillar puis pillar
@@ -87,7 +92,7 @@ public class EndBossMovement {
         }
 
         // --- cible inaccessible au sol (vide, trou...) : pont + marche directe
-        if (unreachable && dist > 3.0 && boss.isOnGround()) {
+        if (unreachable && dist > 3.0 && boss.isOnGround() && !(brain.water().enabled() && t.isInWater())) {
             if (stuckTicks >= 20) brain.scaffold().clearPath(t);
             brain.scaffold().bridgeToward(t);
             Vector dir = tl.toVector().subtract(bl.toVector()).setY(0);

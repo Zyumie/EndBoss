@@ -46,6 +46,7 @@ public class EndBossScaffold {
         BlockRestorer.apply(b, Material.AIR, ttl());
         Location c = b.getLocation().add(0.5, 0.5, 0.5);
         b.getWorld().spawnParticle(Particle.BLOCK, c, 12, 0.3, 0.3, 0.3, data);
+        EndBossEffects.burst(c, data.getMaterial(), 3);
         b.getWorld().playSound(c, Sound.BLOCK_STONE_BREAK, 0.8f, 0.7f);
         return true;
     }

@@ -3,6 +3,10 @@ package fr.zyumie.EndBoss;
 import fr.zyumie.EndBoss.IA.BlockRestorer;
 import fr.zyumie.EndBoss.IA.EndBossAIController;
 import fr.zyumie.EndBoss.IA.EndBossBrain;
+import fr.zyumie.EndBoss.IA.EndBossCinematics;
+import fr.zyumie.EndBoss.IA.EndBossEffects;
+import fr.zyumie.EndBoss.IA.ScrambledInventories;
+import fr.zyumie.EndBoss.IA.StolenItems;
 import fr.zyumie.EndBoss.Listener.EndBossListener;
 import fr.zyumie.EndBoss.Listener.EndBossManager;
 import org.bukkit.Bukkit;
@@ -40,6 +44,8 @@ public class Main extends JavaPlugin implements CommandExecutor, TabCompleter {
         if (!new File(getDataFolder(), "Impossible.yml").exists()) saveResource("Impossible.yml", false);
         EndBossRegistry.init(this);
         BlockRestorer.init(this);
+        EndBossEffects.init(this);
+        EndBossCinematics.init(this);
 
         if (getCommand("endboss") != null) {
             getCommand("endboss").setExecutor(this);
@@ -56,8 +62,11 @@ public class Main extends JavaPlugin implements CommandExecutor, TabCompleter {
     @Override
     public void onDisable() {
         EndBossAIController.stop();
+        StolenItems.restoreAll();
+        ScrambledInventories.restoreAll();
         EndBossRegistry.shutdownAll();
         BlockRestorer.restoreAll(); // rien ne reste cassé / posé après un arrêt ou un reload
+        EndBossEffects.shutdown();
     }
 
     // ---- Boss.yml sert de configuration (avant : saveResource sans jamais le lire)
@@ -183,6 +192,7 @@ public class Main extends JavaPlugin implements CommandExecutor, TabCompleter {
             case "reload" -> {
                 reloadConfig();
                 BlockRestorer.reload();
+                EndBossEffects.reload();
                 for (EndBossBrain b : EndBossRegistry.all()) b.phases().refresh();
                 EndBossAIController.startAI(this);
                 sender.sendMessage(ChatColor.GREEN + "Boss.yml rechargé.");

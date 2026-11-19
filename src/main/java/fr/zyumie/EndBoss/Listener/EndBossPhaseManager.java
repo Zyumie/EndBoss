@@ -1,6 +1,7 @@
 package fr.zyumie.EndBoss.Listener;
 
 import fr.zyumie.EndBoss.IA.Ability;
+import fr.zyumie.EndBoss.IA.EndBossEffects;
 import fr.zyumie.EndBoss.IA.EndBossBrain;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -36,9 +37,11 @@ public class EndBossPhaseManager {
     };
     private static final String[][] DEF_ABILITIES = {
             {},
-            {"LEAP", "DASH_STRIKE", "SWORD_THROW", "SHIELD_UP", "BLINK"},
-            {"LEAP", "DASH_STRIKE", "SWORD_THROW", "SHIELD_UP", "BLINK", "MACE_SMASH", "SHOCKWAVE", "SUMMON"},
-            {"LEAP", "DASH_STRIKE", "SWORD_THROW", "SHIELD_UP", "BLINK", "MACE_SMASH", "SHOCKWAVE", "SUMMON", "METEORS"}
+            {"LEAP", "DASH_STRIKE", "SWORD_THROW", "SHIELD_UP", "BLINK", "BLOCK_BARRAGE"},
+            {"LEAP", "DASH_STRIKE", "SWORD_THROW", "SHIELD_UP", "BLINK", "MACE_SMASH", "SHOCKWAVE", "SUMMON", "BLOCK_BARRAGE",
+                    "SKY_SLAM", "ITEM_THEFT", "SKY_RAPTURE", "INVENTORY_SCRAMBLE"},
+            {"LEAP", "DASH_STRIKE", "SWORD_THROW", "SHIELD_UP", "BLINK", "MACE_SMASH", "SHOCKWAVE", "SUMMON", "METEORS", "BLOCK_BARRAGE",
+                    "SKY_SLAM", "ITEM_THEFT", "SKY_RAPTURE", "INVENTORY_SCRAMBLE"}
     };
 
     private final EndBossBrain brain;
@@ -65,7 +68,8 @@ public class EndBossPhaseManager {
         String fmt = brain.cfg().getString("boss.display.overhead-format", "&c❤ &f{hearts}");
         double hp = brain.boss.getHealth();
         String s = fmt.replace("{hearts}", String.valueOf((int) Math.ceil(hp / 2.0)))
-                .replace("{hp}", String.valueOf((int) Math.ceil(hp)));
+                .replace("{hp}", String.valueOf((int) Math.ceil(hp)))
+                .replace("{totems}", String.valueOf(brain.totemsLeft()));
         s = ChatColor.translateAlternateColorCodes('&', s);
         if (!s.equals(lastOverhead)) {
             lastOverhead = s;
@@ -78,7 +82,10 @@ public class EndBossPhaseManager {
         String base = brain.cfg().getString("boss.name", "&4EndBoss");
         String name = ChatColor.translateAlternateColorCodes('&', base) + suffix;
         int totems = brain.totemsLeft();
-        if (totems > 0) name += ChatColor.translateAlternateColorCodes('&', " &6[Totems : " + totems + "]");
+        if (totems > 0 && brain.cfg().getBoolean("boss.totems.display", true)) {
+            String format = brain.cfg().getString("boss.totems.display-format", " &6[Totems : {left}]");
+            name += ChatColor.translateAlternateColorCodes('&', format.replace("{left}", String.valueOf(totems)));
+        }
         return name;
     }
 
@@ -148,6 +155,7 @@ public class EndBossPhaseManager {
         EndBossBrain.setAttribute(boss, Attribute.KNOCKBACK_RESISTANCE, 0.85);
         EndBossBrain.setAttribute(boss, Attribute.STEP_HEIGHT, 1.1);
         EndBossBrain.setAttribute(boss, Attribute.SAFE_FALL_DISTANCE, 64.0);
+        brain.water().apply();
     }
 
     private void transition(int phase) {
@@ -163,6 +171,7 @@ public class EndBossPhaseManager {
         w.playSound(loc, Sound.ENTITY_WITHER_SPAWN, 1.5f, 0.7f);
         w.spawnParticle(Particle.EXPLOSION_EMITTER, loc.clone().add(0, 1, 0), 3, 1, 1, 1, 0);
         w.spawnParticle(Particle.TOTEM_OF_UNDYING, loc.clone().add(0, 1, 0), 120, 1.2, 1.5, 1.2, 0.4);
+        EndBossEffects.eruption(loc, phase);
 
         double range = brain.cfg().getDouble("boss.ai.bar-range", 64.0);
         for (Player pl : w.getNearbyPlayers(loc, range)) {

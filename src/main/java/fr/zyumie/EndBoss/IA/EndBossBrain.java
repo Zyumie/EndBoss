@@ -27,10 +27,12 @@ import org.bukkit.util.Vector;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -62,6 +64,7 @@ public class EndBossBrain {
     private final EndBossCombat combat;
     private final EndBossScaffold scaffold;
     private final EndBossPhaseManager phases;
+    private final EndBossWater water;
 
     private Player target;
     private long now, busyUntil, nextDecision, shieldUntil, shieldDisabledUntil;
@@ -69,7 +72,7 @@ public class EndBossBrain {
     private long idleTicks;
     private int shieldBlocks;
     private int totemsLeft;
-    private boolean shieldWasUp, shutdown;
+    private boolean shieldWasUp, shutdown, cinematic;
     private Ability lastAbility;
     private Location lastSafe;
 
@@ -91,11 +94,12 @@ public class EndBossBrain {
             boss.getPersistentDataContainer().set(EndBossRegistry.totemKey(), PersistentDataType.INTEGER, stored);
         }
         this.totemsLeft = stored;
-        this.interval = Math.max(1, cfg().getInt("boss.ai.tick-interval", 2));
+        this.interval = Math.max(1, plugin.getConfig().getInt("boss.ai.tick-interval", 2));
         this.bar = new EndBossBar("EndBoss", cfg().getDouble("boss.ai.bar-range", 64.0));
         this.scaffold = new EndBossScaffold(this);
         this.movement = new EndBossMovement(this);
         this.combat = new EndBossCombat(this);
+        this.water = new EndBossWater(this);
         this.phases = new EndBossPhaseManager(this);
         this.lastSafe = boss.getLocation().clone();
         this.phases.update(); // applique la phase initiale : stats, nom, capacités
@@ -110,6 +114,7 @@ public class EndBossBrain {
     public EndBossMovement movement() { return movement; }
     public EndBossCombat combat() { return combat; }
     public EndBossScaffold scaffold() { return scaffold; }
+    public EndBossWater water() { return water; }
     public Player target() { return target; }
     public long now() { return now; }
     public double skill() { return cfg().getDouble("boss.ai.skill", 0.75); }
@@ -158,7 +163,7 @@ public class EndBossBrain {
 
     public void startCooldown(Ability a) {
         double jitter = 0.9 + rng.nextDouble() * 0.2;
-        cooldowns.put(a, now + Math.round(a.cooldown * phases.cooldownMultiplier() * jitter));
+        cooldowns.put(a, now + Math.round(a.cooldown * phases.cooldownMultiplier() * water.cooldownMultiplier() * jitter));
     }
 
     // ------------------------------------------------------------------ minions
@@ -294,7 +299,24 @@ public class EndBossBrain {
         boss.getWorld().playSound(lastSafe, Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 0.6f);
     }
 
+    public void beginCinematic(int ticks) {
+        cinematic = true;
+        busy(ticks);
+        boss.setInvulnerable(true);
+        boss.setAI(false);
+        boss.setGravity(false);
+    }
+
+    public void endCinematic() {
+        if (!cinematic) return;
+        cinematic = false;
+        boss.setInvulnerable(false);
+        boss.setAI(true);
+        boss.setGravity(true);
+    }
+
     public void shutdown() {
+        endCinematic();
         shutdown = true;
         bar.remove();
         boss.setGravity(true);
@@ -310,6 +332,7 @@ public class EndBossBrain {
         now += interval;
         if (!isAlive()) return;
         if (boss.isOnGround()) lastSafe = boss.getLocation().clone();
+        water.tick();
 
         threat.decay();
         target = pickTarget();
@@ -355,6 +378,7 @@ public class EndBossBrain {
      * quand personne ne l'a touché depuis quelques secondes (il récupère si on le laisse tranquille).
      */
     private void regen() {
+        if (!cfg().getBoolean("boss.regeneration.enabled", false)) return;
         double max = maxHealth();
         double hp = boss.getHealth();
         if (hp >= max) return;
@@ -403,13 +427,16 @@ public class EndBossBrain {
         boolean bow = target.isHandRaised()
                 && (held == Material.BOW || held == Material.CROSSBOW || held == Material.TRIDENT);
 
-        Ctx c = new Ctx(dist, los, tl.getY() - bl.getY(), boss.isOnGround(),
+        Ctx c = new Ctx(dist, los, tl.getY() - bl.getY(), boss.isOnGround() || water.active(),
                 adaptive ? prof.kite() : 0, adaptive ? prof.pillar() : 0, adaptive ? prof.aerial() : 0,
                 crowd, now - lastHurt < 50, bow, phases.current(), prof.isStationary(), movement.isUnreachable());
 
+        Set<Ability> options = EnumSet.copyOf(phases.abilities());
+        if (water.whirlpoolEnabled()) options.add(Ability.WHIRLPOOL);
+
         Ability best = null;
         double bestScore = 18.0;
-        for (Ability a : phases.abilities()) {
+        for (Ability a : options) {
             if (!ready(a)) continue;
             double s = score(a, c);
             if (a == lastAbility) s *= 0.55;               // anti-répétition : on varie les attaques
@@ -426,7 +453,7 @@ public class EndBossBrain {
         }
         lastAbility = best;
         int gap = c.phase() >= 3 ? 24 : c.phase() == 2 ? 34 : 46;   // plus la phase est avancée, moins il respire
-        nextDecision = now + gap + rng.nextInt(15);
+        nextDecision = now + Math.round((gap + rng.nextInt(15)) * water.cooldownMultiplier());
         combat.execute(best, target);
     }
 
@@ -454,6 +481,22 @@ public class EndBossBrain {
             case SUMMON -> minionCount() == 0 ? 30 : 0;
             case METEORS -> (c.dist() > 5 && c.dist() < 32)
                     ? 36 + c.kite() * 25 + c.aerial() * 25 + (c.stationary() ? 14 : 0)
+                    : 0;
+            case BLOCK_BARRAGE -> (c.ground() && c.los() && c.dist() > 5 && c.dist() < 28)
+                    ? 38 + c.kite() * 20 + (c.stationary() ? 10 : 0)
+                    : 0;
+            case SKY_SLAM -> (c.ground() && Math.abs(c.dy()) < 3 && c.dist() > 2 && c.dist() < 24)
+                    ? 62 + c.phase() * 4 + (c.stationary() ? 14 : 0)
+                    : 0;
+            case ITEM_THEFT -> (c.los() && c.dist() < 18
+                    && !target.getInventory().getItemInMainHand().getType().isAir()
+                    && rng.nextDouble() < (c.phase() >= 3 ? 0.12 : 0.04))
+                    ? 90
+                    : 0;
+            case SKY_RAPTURE -> (c.ground() && rng.nextDouble() < 0.05) ? 95 : 0;
+            case INVENTORY_SCRAMBLE -> (c.los() && c.dist() < 24 && rng.nextDouble() < 0.08) ? 88 : 0;
+            case WHIRLPOOL -> (water.whirlpoolEnabled() && target.isInWater() && c.dist() < water.whirlpoolRadius())
+                    ? 78 + c.phase() * 4
                     : 0;
         };
     }

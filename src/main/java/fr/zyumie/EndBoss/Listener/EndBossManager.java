@@ -2,6 +2,7 @@ package fr.zyumie.EndBoss.Listener;
 
 import fr.zyumie.EndBoss.EndBossRegistry;
 import fr.zyumie.EndBoss.IA.EndBossBrain;
+import fr.zyumie.EndBoss.IA.EndBossCinematics;
 import fr.zyumie.EndBoss.Main;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -35,7 +36,12 @@ public class EndBossManager {
 
         double maxHealth = cfg.getDouble("boss.health", 800.0);
         EndBossBrain.setAttribute(boss, Attribute.MAX_HEALTH, maxHealth);
-        boss.setHealth(maxHealth);
+        double allowed = boss.getAttribute(Attribute.MAX_HEALTH).getValue();
+        if (allowed < maxHealth) {
+            plugin.getLogger().warning("Vie du boss limitée à " + allowed + " au lieu de " + maxHealth
+                    + " : augmente settings.attribute.maxHealth.max dans spigot.yml.");
+        }
+        boss.setHealth(allowed);
 
         EntityEquipment eq = boss.getEquipment();
         if (eq != null) {
@@ -59,10 +65,11 @@ public class EndBossManager {
         }
 
         EndBossRegistry.setBossAlive(plugin, true);
-        EndBossRegistry.register(plugin, boss);
+        EndBossBrain brain = EndBossRegistry.register(plugin, boss);
 
         loc.getWorld().spawnParticle(Particle.REVERSE_PORTAL, loc.clone().add(0, 1, 0), 120, 1, 1.5, 1, 0.4);
         loc.getWorld().playSound(loc, Sound.ENTITY_WITHER_SPAWN, 2.0f, 0.6f);
+        EndBossCinematics.intro(brain);
         return boss;
     }
 

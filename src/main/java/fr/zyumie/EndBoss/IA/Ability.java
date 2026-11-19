@@ -13,7 +13,13 @@ public enum Ability {
     MACE_SMASH(180),
     SHOCKWAVE(240),
     SUMMON(500),
-    METEORS(320);
+    METEORS(320),
+    BLOCK_BARRAGE(220),
+    SKY_SLAM(240),
+    ITEM_THEFT(1800),
+    SKY_RAPTURE(2400),
+    INVENTORY_SCRAMBLE(1200),
+    WHIRLPOOL(260);
 
     public final int cooldown;
 

@@ -23,6 +23,7 @@ public class EndBossAIController {
             @Override
             public void run() {
                 BlockRestorer.tick();
+                EndBossEffects.tick();
 
                 for (EndBossBrain brain : EndBossRegistry.all()) {
                     try {

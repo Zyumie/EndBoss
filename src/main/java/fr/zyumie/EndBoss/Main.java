@@ -9,6 +9,7 @@ import fr.zyumie.EndBoss.IA.ScrambledInventories;
 import fr.zyumie.EndBoss.IA.StolenItems;
 import fr.zyumie.EndBoss.Listener.EndBossListener;
 import fr.zyumie.EndBoss.Listener.EndBossManager;
+import fr.zyumie.EndBoss.Listener.VersionManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.World;
@@ -36,6 +37,7 @@ import java.util.Map;
 public class Main extends JavaPlugin implements CommandExecutor, TabCompleter {
 
     private FileConfiguration bossConfig;
+    private VersionManager versionManager;
     private final Map<String, FileConfiguration> profiles = new HashMap<>();
 
     @Override
@@ -50,6 +52,13 @@ public class Main extends JavaPlugin implements CommandExecutor, TabCompleter {
         if (getCommand("endboss") != null) {
             getCommand("endboss").setExecutor(this);
             getCommand("endboss").setTabCompleter(this);
+        }
+
+    // VersionManager
+        versionManager = new VersionManager(this);
+        getServer().getPluginManager().registerEvents(versionManager, this);
+        if (getConfig().getBoolean("check-updates", true)) {
+            versionManager.checkAsync();
         }
 
         getServer().getPluginManager().registerEvents(new EndBossListener(this), this);

@@ -12,6 +12,10 @@ boss:
   ability-damage: 1.0          # multiplicateur global des capacités (mace smash, onde de choc, météores...)
   single-instance: true        # refuse /endboss spawn si un boss est déjà actif
 
+General:
+  # Vérifie les mises à jour sur Modrinth au démarrage
+  check-updates: true
+
   end-lock:
     enabled: true
     message: "&cLe portail de l'End est scellé par la magie noire de l'EndBoss ! Vainquez-le pour l'ouvrir."
